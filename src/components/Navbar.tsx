@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Code2, ChevronRight, Menu, X } from "lucide-react";
 
@@ -63,19 +64,19 @@ export default function Navbar() {
 
         {/* Action Buttons */}
         <div className="hidden md:flex items-center gap-4">
-          <a
-            href="#login"
+          <Link
+            href="/auth?mode=login"
             className="text-sm font-medium text-gray-300 hover:text-white px-3 py-1.5 transition-colors"
           >
             Log In
-          </a>
-          <a
-            href="#signup"
+          </Link>
+          <Link
+            href="/auth?mode=signup"
             className="group relative inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-full bg-white text-black hover:bg-gray-100 transition-all shadow-md shadow-white/10 hover:shadow-cyan-500/20 active:scale-95"
           >
             Get Started
             <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </a>
+          </Link>
         </div>
 
         {/* Mobile Toggle */}
@@ -107,20 +108,20 @@ export default function Navbar() {
             </a>
           ))}
           <div className="flex flex-col gap-3 pt-2">
-            <a
-              href="#login"
+            <Link
+              href="/auth?mode=login"
               onClick={() => setMobileMenuOpen(false)}
               className="text-center py-2.5 text-sm text-gray-300 border border-white/10 rounded-xl"
             >
               Log In
-            </a>
-            <a
-              href="#signup"
+            </Link>
+            <Link
+              href="/auth?mode=signup"
               onClick={() => setMobileMenuOpen(false)}
               className="text-center py-2.5 text-sm font-medium text-black bg-white rounded-xl"
             >
               Get Started
-            </a>
+            </Link>
           </div>
         </motion.div>
       )}

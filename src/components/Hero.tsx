@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { ArrowRight, Sparkles, ShieldCheck, Users, GraduationCap, Award } from "lucide-react";
 import HeroInteractiveCode from "./hero/HeroInteractiveCode";
 
@@ -37,13 +38,13 @@ export default function Hero() {
 
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-4 pt-2">
-              <a
-                href="#signup"
+              <Link
+                href="/auth?mode=signup"
                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-black font-semibold text-sm hover:bg-gray-100 transition-all shadow-xl shadow-white/10 hover:shadow-cyan-500/20 active:scale-95"
               >
                 Start Learning
                 <ArrowRight className="w-4 h-4" />
-              </a>
+              </Link>
               <a
                 href="#visualization"
                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-[#141414] text-gray-200 font-medium text-sm border border-white/10 hover:bg-[#181818] hover:text-white transition-all active:scale-95"

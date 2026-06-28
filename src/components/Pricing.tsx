@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
 
 const plans = [
@@ -111,8 +112,8 @@ export default function Pricing() {
               </div>
 
               <div className="pt-8 mt-8 border-t border-white/5">
-                <a
-                  href="#signup"
+                <Link
+                  href="/auth?mode=signup"
                   className={`w-full py-3.5 rounded-full font-semibold text-xs text-center block transition-all active:scale-95 ${
                     plan.popular
                       ? "bg-cyan-400 text-black hover:bg-cyan-300 shadow-lg shadow-cyan-500/20"
@@ -120,7 +121,7 @@ export default function Pricing() {
                   }`}
                 >
                   {plan.cta}
-                </a>
+                </Link>
               </div>
             </motion.div>
           ))}

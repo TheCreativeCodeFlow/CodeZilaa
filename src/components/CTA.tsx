@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function CTA() {
@@ -29,13 +30,13 @@ export default function CTA() {
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-              <a
-                href="#signup"
+              <Link
+                href="/auth?mode=signup"
                 className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-100 transition-all shadow-xl shadow-white/10 hover:shadow-cyan-500/20 active:scale-95"
               >
                 Start Learning Now
                 <ArrowRight className="w-4 h-4" />
-              </a>
+              </Link>
               <a
                 href="#visualization"
                 className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-[#181818] text-gray-200 font-medium text-sm border border-white/10 hover:bg-[#202020] hover:text-white transition-all active:scale-95"
