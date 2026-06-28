@@ -109,7 +109,6 @@ export default function StudioPage() {
         language={language}
         onLanguageChange={handleLanguageChange}
         onRun={handleRunCode}
-        onVisualize={() => router.push("/workspace/visualizer")}
         onFormat={handleFormatCode}
         onSave={handleSaveFile}
         onDownload={handleDownloadFile}

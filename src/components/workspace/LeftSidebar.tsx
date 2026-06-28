@@ -27,8 +27,8 @@ export default function LeftSidebar() {
   const navItems = [
     { name: "Home", href: "/workspace", icon: LayoutDashboard, category: "Core" },
     { name: "Coding Practice", href: "/workspace/practice", icon: Code2, category: "Core" },
-    { name: "CodeZilaa Studio", href: "/studio", icon: Terminal, category: "Tools" },
-    { name: "Visualizer", href: "/workspace/visualizer", icon: Cpu, category: "Tools" },
+    { name: "Code Studio", href: "/studio", icon: Terminal, category: "Tools" },
+    { name: "Code Visualizer", href: "/visualizer", icon: Cpu, category: "Tools" },
     { name: "Roadmaps", href: "/workspace/roadmaps", icon: MapPin, category: "Learning" },
     { name: "Aptitude", href: "/workspace/aptitude", icon: BookOpen, category: "Learning" },
     { name: "Progress", href: "/workspace/progress", icon: BarChart3, category: "Analytics" },

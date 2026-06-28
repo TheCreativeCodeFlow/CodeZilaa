@@ -1,0 +1,49 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import BackgroundEffects from "@/components/ui/BackgroundEffects";
+import { Loader2 } from "lucide-react";
+
+function VisualizerGuard({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !isLoading && !isAuthenticated) {
+      router.push("/auth?mode=login");
+    }
+  }, [mounted, isLoading, isAuthenticated, router]);
+
+  if (!mounted || isLoading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#090909] flex flex-col items-center justify-center text-white selection:bg-cyan-500/30">
+        <Loader2 className="w-8 h-8 text-purple-400 animate-spin mb-3" />
+        <p className="text-sm font-mono text-gray-400">Launching Code Visualizer...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen w-screen bg-[#09090b] text-white selection:bg-purple-500/30 selection:text-white flex flex-col">
+      <BackgroundEffects />
+      <div className="relative z-10 flex-1 flex flex-col min-h-screen">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function VisualizerLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <VisualizerGuard>{children}</VisualizerGuard>
+    </AuthProvider>
+  );
+}

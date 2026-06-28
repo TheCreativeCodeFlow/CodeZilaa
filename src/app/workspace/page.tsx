@@ -79,7 +79,7 @@ export default function WorkspaceHomePage() {
         </div>
 
         <Link
-          href="/workspace/visualizer"
+          href="/visualizer"
           className="px-6 py-3.5 rounded-2xl bg-white text-black hover:bg-gray-100 font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xl shadow-white/10 hover:shadow-cyan-500/20 transition-all active:scale-95 shrink-0 cursor-pointer"
         >
           <Play className="w-4 h-4 fill-black" />
