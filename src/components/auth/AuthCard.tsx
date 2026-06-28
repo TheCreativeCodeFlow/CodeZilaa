@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useId } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/context/AuthContext";
 import {
   Mail,
   Lock,
@@ -30,6 +32,8 @@ export default function AuthCard({
   onOpenForgotPassword,
   onSuccess,
 }: AuthCardProps) {
+  const router = useRouter();
+  const { login, register } = useAuth();
   const emailInputId = useId();
   const passwordInputId = useId();
   const nameInputId = useId();
@@ -106,7 +110,9 @@ export default function AuthCard({
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
+      login(signInEmail);
       onSuccess("Welcome back! Successfully logged in.");
+      router.push("/workspace");
     }, 1200);
   };
 
@@ -137,7 +143,9 @@ export default function AuthCard({
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
+      register(fullName, signUpEmail, college, currentYear);
       onSuccess("Account created successfully! Welcome to CodeZilaa.");
+      router.push("/workspace");
     }, 1500);
   };
 
@@ -145,7 +153,9 @@ export default function AuthCard({
     setGoogleLoading(true);
     setTimeout(() => {
       setGoogleLoading(false);
+      login("google.user@codezilaa.com", "Google Developer");
       onSuccess("Authenticated with Google successfully!");
+      router.push("/workspace");
     }, 1400);
   };
 

@@ -5,19 +5,27 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import BackgroundEffects from "@/components/ui/BackgroundEffects";
 import AuthLeftStory from "./AuthLeftStory";
 import AuthCard from "./AuthCard";
 import ForgotPasswordModal from "./ForgotPasswordModal";
 
-export default function AuthContainer() {
+function AuthContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
 
   const initialMode = searchParams.get("mode") === "signup" ? "signup" : "login";
   const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.push("/workspace");
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   useEffect(() => {
     const paramMode = searchParams.get("mode");
@@ -59,12 +67,12 @@ export default function AuthContainer() {
       {/* Main Content Split Screen */}
       <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8">
         <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center min-h-[640px] rounded-3xl">
-          {/* Left Column: Visual Storytelling (Desktop 6 cols, Tablet 7 cols, hidden on mobile if preferred or stacked nicely) */}
+          {/* Left Column: Visual Storytelling */}
           <div className="lg:col-span-6 xl:col-span-7 h-full hidden lg:flex flex-col">
             <AuthLeftStory />
           </div>
 
-          {/* Right Column: Authentication Card (Desktop 6 cols, Tablet 5 cols, full width mobile) */}
+          {/* Right Column: Authentication Card */}
           <div className="lg:col-span-6 xl:col-span-5 w-full flex justify-center py-4">
             <AuthCard
               mode={mode}
@@ -76,7 +84,7 @@ export default function AuthContainer() {
         </div>
       </main>
 
-      {/* Footer copyright / info */}
+      {/* Footer copyright */}
       <footer className="relative z-20 py-4 text-center text-xs text-gray-500">
         © {new Date().getFullYear()} CodeZilaa Inc. All rights reserved. Built for developers worldwide.
       </footer>
@@ -104,5 +112,13 @@ export default function AuthContainer() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function AuthContainer() {
+  return (
+    <AuthProvider>
+      <AuthContent />
+    </AuthProvider>
   );
 }
