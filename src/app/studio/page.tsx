@@ -4,28 +4,18 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import IDEToolbar from "@/components/compiler/toolbar/IDEToolbar";
-import FileExplorer from "@/components/compiler/explorer/FileExplorer";
 import CodeEditor from "@/components/compiler/editor/CodeEditor";
 import OutputPanel from "@/components/compiler/output/OutputPanel";
 import ExecutionPanel from "@/components/compiler/bottom-panel/ExecutionPanel";
 import IDEStatusBar from "@/components/compiler/statusbar/IDEStatusBar";
 import { CompilerService } from "@/components/compiler/services/compilerService";
-import { IDEFile, SupportedLanguage, ExecutionResult, TestCase } from "@/components/compiler/types/compilerTypes";
+import { SupportedLanguage, ExecutionResult, TestCase } from "@/components/compiler/types/compilerTypes";
 
-const INITIAL_FILES: IDEFile[] = [
-  {
-    id: "1",
-    name: "binary_search.cpp",
-    language: "cpp",
-    content: CompilerService.getTemplate("cpp"),
-  },
-  {
-    id: "2",
-    name: "Solution.java",
-    language: "java",
-    content: CompilerService.getTemplate("java"),
-  },
-];
+const PROBLEM_INFO = {
+  title: "Trapping Rain Water",
+  difficulty: "Hard" as const,
+  topic: "Dynamic Programming",
+};
 
 const INITIAL_TEST_CASES: TestCase[] = [
   { id: "tc1", input: "6\n12 5 8 19 3 27", expectedOutput: "3 5 8 12 19 27", status: "untested" },
@@ -34,16 +24,14 @@ const INITIAL_TEST_CASES: TestCase[] = [
 
 export default function StudioPage() {
   const router = useRouter();
-  const [files, setFiles] = useState<IDEFile[]>(INITIAL_FILES);
-  const [activeFileId, setActiveFileId] = useState<string>("1");
+  const [language, setLanguage] = useState<SupportedLanguage>("cpp");
+  const [code, setCode] = useState<string>(CompilerService.getTemplate("cpp"));
   const [customInput, setCustomInput] = useState<string>("");
   const [testCases, setTestCases] = useState<TestCase[]>(INITIAL_TEST_CASES);
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<number>(13);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
-
-  const activeFile = files.find((f) => f.id === activeFileId) || files[0];
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -58,29 +46,18 @@ export default function StudioPage() {
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [activeFile, customInput, testCases]);
-
-  const handleCodeChange = (newCode: string) => {
-    setFiles((prev) =>
-      prev.map((f) => (f.id === activeFileId ? { ...f, content: newCode, isUnsaved: true } : f))
-    );
-  };
+  }, [code, language, customInput, testCases]);
 
   const handleLanguageChange = (newLang: SupportedLanguage) => {
-    const ext = newLang === "cpp" ? ".cpp" : newLang === "java" ? ".java" : newLang === "python" ? ".py" : ".c";
-    const newName = activeFile.name.split(".")[0] + ext;
-    const template = CompilerService.getTemplate(newLang);
-
-    setFiles((prev) =>
-      prev.map((f) => (f.id === activeFileId ? { ...f, language: newLang, name: newName, content: template, isUnsaved: true } : f))
-    );
+    setLanguage(newLang);
+    setCode(CompilerService.getTemplate(newLang));
   };
 
   const handleRunCode = async () => {
     setIsRunning(true);
     setExecutionResult(null);
     try {
-      const result = await CompilerService.runCode(activeFile.content, activeFile.language, customInput, testCases);
+      const result = await CompilerService.runCode(code, language, customInput, testCases);
       setExecutionResult(result);
       if (result.testCases) {
         setTestCases(result.testCases);
@@ -91,80 +68,63 @@ export default function StudioPage() {
   };
 
   const handleFormatCode = async () => {
-    const formatted = await CompilerService.formatCode(activeFile.content, activeFile.language);
-    handleCodeChange(formatted);
+    const formatted = await CompilerService.formatCode(code, language);
+    setCode(formatted);
   };
 
   const handleSaveFile = () => {
-    setFiles((prev) =>
-      prev.map((f) => (f.id === activeFileId ? { ...f, isUnsaved: false } : f))
-    );
+    // Save to local storage mock
+    localStorage.setItem("codezilaa_saved_code", code);
   };
 
   const handleDownloadFile = () => {
-    const blob = new Blob([activeFile.content], { type: "text/plain" });
+    const ext = language === "cpp" ? ".cpp" : language === "java" ? ".java" : language === "python" ? ".py" : ".c";
+    const filename = `${PROBLEM_INFO.title.toLowerCase().replace(/\s+/g, "_")}${ext}`;
+    const blob = new Blob([code], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = activeFile.name;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleNewFile = (name: string, lang: SupportedLanguage) => {
-    const newFile: IDEFile = {
-      id: Date.now().toString(),
-      name,
-      language: lang,
-      content: CompilerService.getTemplate(lang),
-      isUnsaved: false,
-    };
-    setFiles((prev) => [...prev, newFile]);
-    setActiveFileId(newFile.id);
-  };
-
-  const handleSelectTemplate = (lang: SupportedLanguage) => {
-    handleLanguageChange(lang);
+  const handleResetCode = () => {
+    setCode(CompilerService.getTemplate(language));
+    setExecutionResult(null);
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.99 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
       className="h-full flex flex-col bg-[#09090b] text-white overflow-hidden select-none"
     >
-      {/* Top IDE Toolbar */}
+      {/* Top Streamlined IDE Toolbar */}
       <IDEToolbar
-        fileName={activeFile.name}
-        isUnsaved={!!activeFile.isUnsaved}
-        language={activeFile.language}
+        problemTitle={PROBLEM_INFO.title}
+        difficulty={PROBLEM_INFO.difficulty}
+        topic={PROBLEM_INFO.topic}
+        language={language}
         onLanguageChange={handleLanguageChange}
         onRun={handleRunCode}
         onVisualize={() => router.push("/workspace/visualizer")}
         onFormat={handleFormatCode}
         onSave={handleSaveFile}
         onDownload={handleDownloadFile}
+        onReset={handleResetCode}
         isRunning={isRunning}
       />
 
-      {/* Main IDE Workspace 3-Pane Grid */}
+      {/* Main Studio 2-Column Focused Workbench (72% Editor / 28% Output) */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Explorer */}
-        <FileExplorer
-          files={files}
-          activeFileId={activeFileId}
-          onSelectFile={(id) => setActiveFileId(id)}
-          onNewFile={handleNewFile}
-          onSelectTemplate={handleSelectTemplate}
-        />
-
-        {/* Center Editor & Bottom Panel Column */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Center Hero Code Editor Column (72% Width) */}
+        <div className="w-[72%] flex flex-col overflow-hidden border-r border-white/10">
           <CodeEditor
-            code={activeFile.content}
-            language={activeFile.language}
-            onChange={handleCodeChange}
+            code={code}
+            language={language}
+            onChange={(newCode) => setCode(newCode)}
             fontSize={fontSize}
             onFontSizeChange={setFontSize}
             onCursorChange={(line, col) => setCursorPos({ line, col })}
@@ -177,7 +137,7 @@ export default function StudioPage() {
           />
         </div>
 
-        {/* Right Output Panel */}
+        {/* Right Output Console Column (28% Width) */}
         <OutputPanel
           result={executionResult}
           isRunning={isRunning}

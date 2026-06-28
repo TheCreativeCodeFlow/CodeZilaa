@@ -1,27 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
   Sparkles,
-  Save,
   Download,
-  Share2,
-  Maximize2,
-  Minimize2,
+  MoreHorizontal,
   Wand2,
+  Copy,
+  Share2,
+  RotateCcw,
+  Settings,
+  HelpCircle,
+  Code2,
+  ArrowLeft,
   Loader2,
   Check,
-  Code2,
-  Terminal,
-  ArrowLeft,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { SupportedLanguage } from "../types/compilerTypes";
 
 interface IDEToolbarProps {
-  fileName: string;
-  isUnsaved: boolean;
+  problemTitle: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  topic: string;
   language: SupportedLanguage;
   onLanguageChange: (lang: SupportedLanguage) => void;
   onRun: () => void;
@@ -29,12 +34,14 @@ interface IDEToolbarProps {
   onFormat: () => void;
   onSave: () => void;
   onDownload: () => void;
+  onReset: () => void;
   isRunning: boolean;
 }
 
 export default function IDEToolbar({
-  fileName,
-  isUnsaved,
+  problemTitle,
+  difficulty,
+  topic,
   language,
   onLanguageChange,
   onRun,
@@ -42,19 +49,28 @@ export default function IDEToolbar({
   onFormat,
   onSave,
   onDownload,
+  onReset,
   isRunning,
 }: IDEToolbarProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleCopyCode = () => {
+    onSave();
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   const handleShare = () => {
@@ -64,56 +80,60 @@ export default function IDEToolbar({
   };
 
   return (
-    <div className="h-13 bg-[#121215] border-b border-white/10 px-4 flex items-center justify-between select-none text-xs font-medium z-20">
-      {/* Left section: Studio Brand, Exit Link & File Info */}
+    <div className="h-14 bg-[#0c0c0e] border-b border-white/10 px-4 flex items-center justify-between select-none text-xs font-medium z-30">
+      {/* Left Section: Back Link, Studio Brand & Problem Information */}
       <div className="flex items-center gap-3">
-        {/* Brand Logo & Exit Button */}
-        <div className="flex items-center gap-2 pr-3 border-r border-white/10">
-          <Link
-            href="/workspace"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-1 text-[11px] font-medium"
-            title="Exit Studio to Workspace"
-          >
-            <ArrowLeft className="w-4 h-4 text-cyan-400" />
-            <span className="hidden lg:inline">Workspace</span>
-          </Link>
+        <Link
+          href="/workspace"
+          className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer border border-white/5"
+        >
+          <ArrowLeft className="w-4 h-4 text-cyan-400" />
+          <span className="hidden sm:inline">Workspace</span>
+        </Link>
 
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 shadow-sm">
-            <div className="w-full h-full bg-[#090909] rounded-[6px] flex items-center justify-center">
-              <Code2 className="w-3.5 h-3.5 text-cyan-400" />
-            </div>
-          </div>
-          <span className="font-bold text-sm tracking-tight text-white hidden sm:inline-block">
-            Studio
+        <div className="h-4 w-px bg-white/10 hidden sm:block" />
+
+        {/* Problem Title & Badges */}
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight truncate max-w-xs sm:max-w-md">
+            {problemTitle}
+          </h1>
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+              difficulty === "Hard"
+                ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                : difficulty === "Medium"
+                ? "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30"
+                : "bg-green-500/15 text-green-400 border border-green-500/30"
+            }`}
+          >
+            {difficulty}
+          </span>
+          <span className="hidden md:inline-block px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-mono font-semibold">
+            {topic}
           </span>
         </div>
+      </div>
 
-        {/* Active File Name */}
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-gray-300">
-          <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="font-mono text-white font-semibold">{fileName}</span>
-          {isUnsaved && <span className="text-cyan-400 font-bold text-sm leading-none">•</span>}
-        </div>
-
+      {/* Right Section: Essential Actions & More Dropdown */}
+      <div className="flex items-center gap-2">
         {/* Language Selector */}
         <select
           value={language}
           onChange={(e) => onLanguageChange(e.target.value as SupportedLanguage)}
-          className="px-3 py-1.5 bg-[#18181c] border border-white/10 rounded-lg text-white font-mono focus:outline-none focus:border-cyan-400 cursor-pointer hover:border-white/20 transition-colors"
+          className="px-3 py-1.5 bg-[#16161a] border border-white/10 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-400 cursor-pointer hover:border-white/20 transition-colors"
         >
           <option value="cpp">C++ (GCC 13.2)</option>
           <option value="java">Java 21 (OpenJDK)</option>
           <option value="python">Python 3.12</option>
           <option value="c">C (GCC 13.2)</option>
         </select>
-      </div>
 
-      {/* Center Section: Core Actions (Run & Visualize) */}
-      <div className="flex items-center gap-2">
+        {/* Run Code */}
         <button
           onClick={onRun}
           disabled={isRunning}
-          className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
+          className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold shadow-lg shadow-cyan-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60"
         >
           {isRunning ? (
             <>
@@ -131,59 +151,81 @@ export default function IDEToolbar({
           )}
         </button>
 
+        {/* Visualize Execution */}
         <button
           onClick={onVisualize}
           className="px-3.5 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-          <span>Visualize Execution</span>
+          <span className="hidden sm:inline">Visualize</span>
         </button>
 
-        <button
-          onClick={onFormat}
-          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
-          title="Format Code (Ctrl+Shift+F)"
-        >
-          <Wand2 className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="hidden md:inline">Format</span>
-        </button>
-      </div>
-
-      {/* Right Section: Utilities & Fullscreen */}
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={onSave}
-          className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Save File (Ctrl+S)"
-        >
-          <Save className="w-4 h-4" />
-        </button>
-
+        {/* Download Code */}
         <button
           onClick={onDownload}
-          className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Download Source File"
+          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
+          title={`Download Solution (${language === "cpp" ? ".cpp" : language === "java" ? ".java" : language === "python" ? ".py" : ".c"})`}
         >
-          <Download className="w-4 h-4" />
+          <Download className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden lg:inline">Download</span>
         </button>
 
-        <button
-          onClick={handleShare}
-          className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Share Snippet URL"
-        >
-          {copiedShare ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
-        </button>
+        {/* More Actions (...) Dropdown */}
+        <div className="relative" ref={moreRef}>
+          <button
+            onClick={() => setMoreOpen(!moreOpen)}
+            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer border border-white/5"
+            title="More Actions"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
 
-        <div className="w-px h-4 bg-white/10 mx-1" />
+          <AnimatePresence>
+            {moreOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 mt-2 w-56 bg-[#141418] border border-white/10 rounded-2xl shadow-2xl p-2 z-50 overflow-hidden text-xs space-y-0.5"
+              >
+                <button
+                  onClick={() => { onFormat(); setMoreOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                >
+                  <Wand2 className="w-4 h-4 text-indigo-400" />
+                  <span>Format Code (Ctrl+Shift+F)</span>
+                </button>
 
-        <button
-          onClick={toggleFullscreen}
-          className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen IDE"}
-        >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
+                <button
+                  onClick={() => { handleCopyCode(); setMoreOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                >
+                  {copiedCode ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                  <span>{copiedCode ? "Copied!" : "Copy Code to Clipboard"}</span>
+                </button>
+
+                <button
+                  onClick={() => { handleShare(); setMoreOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
+                >
+                  {copiedShare ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-purple-400" />}
+                  <span>{copiedShare ? "Link Copied!" : "Share Solution URL"}</span>
+                </button>
+
+                <div className="border-t border-white/5 my-1" />
+
+                <button
+                  onClick={() => { onReset(); setMoreOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-yellow-400 hover:bg-yellow-500/10 transition-colors text-left cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset to Starter Template</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

@@ -24,7 +24,7 @@ export default function CodeEditor({
   const [showSearch, setShowSearch] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
-  const [showMinimap, setShowMinimap] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const lines = code.split("\n");
