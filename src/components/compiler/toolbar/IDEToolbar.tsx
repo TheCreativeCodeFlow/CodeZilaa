@@ -30,6 +30,7 @@ interface IDEToolbarProps {
   language: SupportedLanguage;
   onLanguageChange: (lang: SupportedLanguage) => void;
   onRun: () => void;
+  onVisualize: () => void;
   onFormat: () => void;
   onSave: () => void;
   onDownload: () => void;
@@ -44,6 +45,7 @@ export default function IDEToolbar({
   language,
   onLanguageChange,
   onRun,
+  onVisualize,
   onFormat,
   onSave,
   onDownload,
@@ -147,6 +149,15 @@ export default function IDEToolbar({
               </kbd>
             </>
           )}
+        </button>
+
+        {/* Visualize Execution */}
+        <button
+          onClick={onVisualize}
+          className="px-3.5 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold hover:text-white transition-all flex items-center gap-1.5 cursor-pointer animate-pulse-subtle"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+          <span className="hidden sm:inline">Visualize Execution</span>
         </button>
 
         {/* Download Code */}

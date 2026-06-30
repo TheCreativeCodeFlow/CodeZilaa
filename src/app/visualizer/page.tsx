@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -19,228 +20,852 @@ import {
   Sparkles,
   Zap,
   Code2,
-  CheckCircle2,
+  Loader2,
+  PlayCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
-// Simulated Program Steps for Execution Replay
-interface ExecutionStep {
+// Types
+type SupportedLanguage = "cpp" | "java" | "python" | "c";
+
+interface VariableState {
+  name: string;
+  value: string | number;
+  prevValue?: string | number;
+  changed: boolean;
+  focused: boolean;
+}
+
+interface CallStackFrame {
+  id: string;
+  functionName: string;
+  args: string;
+  line: number;
+  active: boolean;
+}
+
+interface StepData {
   stepIndex: number;
   activeLine: number;
   explanation: string;
-  variables: Array<{ name: string; value: string | number; prevValue?: string | number; changed: boolean }>;
-  callStack: Array<{ functionName: string; args: string; line: number }>;
-  memory: {
-    heightArray: number[];
-    leftMaxArray: number[];
-    rightMaxArray: number[];
-    waterTrapped: number[];
-    activePointers: { left?: number; right?: number; current?: number };
+  variables: VariableState[];
+  callStack: CallStackFrame[];
+  consoleLog: string;
+  memoryState: {
+    type: "array" | "tree" | "dp" | "stack";
+    data: any;
   };
-  consoleLogs: string[];
 }
 
-const PROGRAM_CODE = [
-  { line: 1, text: "#include <iostream>" },
-  { line: 2, text: "#include <vector>" },
-  { line: 3, text: "using namespace std;" },
-  { line: 4, text: "" },
-  { line: 5, text: "int trapWater(vector<int>& height) {" },
-  { line: 6, text: "    int n = height.size();" },
-  { line: 7, text: "    if (n == 0) return 0;" },
-  { line: 8, text: "    int left = 0, right = n - 1;" },
-  { line: 9, text: "    int leftMax = 0, rightMax = 0;" },
-  { line: 10, text: "    int totalWater = 0;" },
-  { line: 11, text: "    while (left <= right) {" },
-  { line: 12, text: "        if (height[left] <= height[right]) {" },
-  { line: 13, text: "            if (height[left] >= leftMax) leftMax = height[left];" },
-  { line: 14, text: "            else totalWater += leftMax - height[left];" },
-  { line: 15, text: "            left++;" },
-  { line: 16, text: "        } else {" },
-  { line: 17, text: "            if (height[right] >= rightMax) rightMax = height[right];" },
-  { line: 18, text: "            else totalWater += rightMax - height[right];" },
-  { line: 19, text: "            right--;" },
-  { line: 20, text: "        }" },
-  { line: 21, text: "    }" },
-  { line: 22, text: "    return totalWater;" },
-  { line: 23, text: "}" },
+interface Preset {
+  id: string;
+  title: string;
+  language: SupportedLanguage;
+  code: string;
+  stdin: string;
+  steps: StepData[];
+}
+
+const PRESETS: Preset[] = [
+  {
+    id: "binary_search",
+    title: "Binary Search",
+    language: "cpp",
+    code: `int binarySearch(int arr[], int n, int target) {
+    int left = 0;
+    int right = n - 1;
+    while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (arr[mid] == target) {
+            return mid; // Target found
+        }
+        if (arr[mid] < target) {
+            left = mid + 1; // Search right half
+        } else {
+            right = mid - 1; // Search left half
+        }
+    }
+    return -1; // Target not found
+}`,
+    stdin: "Target: 18\nArray: 2 4 7 10 14 18 23 29 35",
+    steps: [
+      {
+        stepIndex: 1,
+        activeLine: 2,
+        explanation: "Initialize low pointer (left = 0) at the start of search space.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: true },
+          { name: "left", value: 0, changed: true, focused: true },
+          { name: "right", value: "?", changed: false, focused: false },
+          { name: "mid", value: "?", changed: false, focused: false },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 2, active: true }],
+        consoleLog: "[SYSTEM] Memory allocated for array at 0x7ffd90a0.\n[EXECUTION] Initializing boundary indices.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 0,
+            right: 8,
+            mid: -1,
+            compareIdx: -1,
+          },
+        },
+      },
+      {
+        stepIndex: 2,
+        activeLine: 3,
+        explanation: "Initialize high pointer (right = 8) to the end of search space (index 8).",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: true },
+          { name: "left", value: 0, changed: false, focused: false },
+          { name: "right", value: 8, prevValue: "?", changed: true, focused: true },
+          { name: "mid", value: "?", changed: false, focused: false },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 3, active: true }],
+        consoleLog: "[EXECUTION] Search space boundaries set to indices [0...8].",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 0,
+            right: 8,
+            mid: -1,
+            compareIdx: -1,
+          },
+        },
+      },
+      {
+        stepIndex: 3,
+        activeLine: 5,
+        explanation: "Calculate midpoint indices. mid = 0 + (8 - 0)/2 = 4. arr[4] is 14.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: false },
+          { name: "left", value: 0, changed: false, focused: false },
+          { name: "right", value: 8, changed: false, focused: false },
+          { name: "mid", value: 4, prevValue: "?", changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 5, active: true }],
+        consoleLog: "[CALCULATION] mid = 0 + (8-0)/2 = 4. Checking arr[4] = 14.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 0,
+            right: 8,
+            mid: 4,
+            compareIdx: 4,
+          },
+        },
+      },
+      {
+        stepIndex: 4,
+        activeLine: 9,
+        explanation: "Since arr[mid] (14) < target (18), the target lies in the right side. Discard indices <= 4.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: true },
+          { name: "left", value: 5, prevValue: 0, changed: true, focused: true },
+          { name: "right", value: 8, changed: false, focused: false },
+          { name: "mid", value: 4, changed: false, focused: false },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 9, active: true }],
+        consoleLog: "[STATE] arr[4] (14) < 18. Adjusting left boundary to mid + 1 = 5.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 5,
+            right: 8,
+            mid: 4,
+            compareIdx: 4,
+          },
+        },
+      },
+      {
+        stepIndex: 5,
+        activeLine: 5,
+        explanation: "Recalculate midpoint for active range [5...8]. mid = 5 + (8 - 5)/2 = 6. arr[6] is 23.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: false },
+          { name: "left", value: 5, changed: false, focused: false },
+          { name: "right", value: 8, changed: false, focused: false },
+          { name: "mid", value: 6, prevValue: 4, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 5, active: true }],
+        consoleLog: "[CALCULATION] mid = 5 + (8-5)/2 = 6. Checking arr[6] = 23.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 5,
+            right: 8,
+            mid: 6,
+            compareIdx: 6,
+          },
+        },
+      },
+      {
+        stepIndex: 6,
+        activeLine: 11,
+        explanation: "Since arr[mid] (23) > target (18), target lies in the left side of range. Discard indices >= 6.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: true },
+          { name: "left", value: 5, changed: false, focused: false },
+          { name: "right", value: 5, prevValue: 8, changed: true, focused: true },
+          { name: "mid", value: 6, changed: false, focused: false },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 11, active: true }],
+        consoleLog: "[STATE] arr[6] (23) > 18. Adjusting right boundary to mid - 1 = 5.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 5,
+            right: 5,
+            mid: 6,
+            compareIdx: 6,
+          },
+        },
+      },
+      {
+        stepIndex: 7,
+        activeLine: 5,
+        explanation: "Calculate midpoint for range [5...5]. mid = 5. arr[5] is 18.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: false },
+          { name: "left", value: 5, changed: false, focused: false },
+          { name: "right", value: 5, changed: false, focused: false },
+          { name: "mid", value: 5, prevValue: 6, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 5, active: true }],
+        consoleLog: "[CALCULATION] mid = 5. Checking arr[5] = 18.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 5,
+            right: 5,
+            mid: 5,
+            compareIdx: 5,
+          },
+        },
+      },
+      {
+        stepIndex: 8,
+        activeLine: 7,
+        explanation: "Match found! arr[5] (18) == target (18). Returning index 5.",
+        variables: [
+          { name: "target", value: 18, changed: false, focused: true },
+          { name: "left", value: 5, changed: false, focused: false },
+          { name: "right", value: 5, changed: false, focused: false },
+          { name: "mid", value: 5, changed: false, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "binarySearch(arr, 9, 18)", args: "arr[9], n=9, target=18", line: 7, active: true }],
+        consoleLog: "[SUCCESS] Target 18 found at index 5. Function returns 5.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [2, 4, 7, 10, 14, 18, 23, 29, 35],
+            left: 5,
+            right: 5,
+            mid: 5,
+            compareIdx: 5,
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: "bubble_sort",
+    title: "Bubble Sort",
+    language: "cpp",
+    code: `void bubbleSort(int arr[], int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                swap(arr[j], arr[j + 1]);
+            }
+        }
+    }
+}`,
+    stdin: "Array: 14 5 29 10 18",
+    steps: [
+      {
+        stepIndex: 1,
+        activeLine: 2,
+        explanation: "Bubble Sort outer loop starts. i = 0.",
+        variables: [
+          { name: "i", value: 0, changed: true, focused: true },
+          { name: "j", value: "?", changed: false, focused: false },
+          { name: "arr[j]", value: "?", changed: false, focused: false },
+          { name: "arr[j+1]", value: "?", changed: false, focused: false },
+        ],
+        callStack: [{ id: "f1", functionName: "bubbleSort(arr, 5)", args: "arr[5], n=5", line: 2, active: true }],
+        consoleLog: "[SYSTEM] Sorting array [14, 5, 29, 10, 18].\n[EXECUTION] Outer loop i=0 active.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [14, 5, 29, 10, 18],
+            left: -1,
+            right: -1,
+            mid: -1,
+            compareIdx: 0,
+            compareIdx2: 1,
+            swapState: false,
+          },
+        },
+      },
+      {
+        stepIndex: 2,
+        activeLine: 3,
+        explanation: "Inner loop starts. j = 0. Compare arr[0] (14) with arr[1] (5).",
+        variables: [
+          { name: "i", value: 0, changed: false, focused: false },
+          { name: "j", value: 0, prevValue: "?", changed: true, focused: true },
+          { name: "arr[j]", value: 14, prevValue: "?", changed: true, focused: true },
+          { name: "arr[j+1]", value: 5, prevValue: "?", changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "bubbleSort(arr, 5)", args: "arr[5], n=5", line: 3, active: true }],
+        consoleLog: "[EXECUTION] Inner loop j=0. Comparing arr[0] (14) > arr[1] (5).",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [14, 5, 29, 10, 18],
+            left: -1,
+            right: -1,
+            mid: -1,
+            compareIdx: 0,
+            compareIdx2: 1,
+            swapState: false,
+          },
+        },
+      },
+      {
+        stepIndex: 3,
+        activeLine: 5,
+        explanation: "Since 14 > 5, elements swap physical positions in memory.",
+        variables: [
+          { name: "i", value: 0, changed: false, focused: false },
+          { name: "j", value: 0, changed: false, focused: false },
+          { name: "arr[j]", value: 5, prevValue: 14, changed: true, focused: true },
+          { name: "arr[j+1]", value: 14, prevValue: 5, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "bubbleSort(arr, 5)", args: "arr[5], n=5", line: 5, active: true }],
+        consoleLog: "[MUTATION] Swapping arr[0] and arr[1].",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [5, 14, 29, 10, 18],
+            left: -1,
+            right: -1,
+            mid: -1,
+            compareIdx: 0,
+            compareIdx2: 1,
+            swapState: true,
+          },
+        },
+      },
+      {
+        stepIndex: 4,
+        activeLine: 3,
+        explanation: "Inner loop increments: j = 1. Compare arr[1] (14) with arr[2] (29).",
+        variables: [
+          { name: "i", value: 0, changed: false, focused: false },
+          { name: "j", value: 1, prevValue: 0, changed: true, focused: true },
+          { name: "arr[j]", value: 14, prevValue: 5, changed: true, focused: true },
+          { name: "arr[j+1]", value: 29, prevValue: 14, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "bubbleSort(arr, 5)", args: "arr[5], n=5", line: 3, active: true }],
+        consoleLog: "[EXECUTION] Inner loop j=1. Comparing arr[1] (14) > arr[2] (29) -> False.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [5, 14, 29, 10, 18],
+            left: -1,
+            right: -1,
+            mid: -1,
+            compareIdx: 1,
+            compareIdx2: 2,
+            swapState: false,
+          },
+        },
+      },
+      {
+        stepIndex: 5,
+        activeLine: 3,
+        explanation: "Inner loop increments: j = 2. Compare arr[2] (29) with arr[3] (10).",
+        variables: [
+          { name: "i", value: 0, changed: false, focused: false },
+          { name: "j", value: 2, prevValue: 1, changed: true, focused: true },
+          { name: "arr[j]", value: 29, prevValue: 14, changed: true, focused: true },
+          { name: "arr[j+1]", value: 10, prevValue: 29, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "bubbleSort(arr, 5)", args: "arr[5], n=5", line: 3, active: true }],
+        consoleLog: "[EXECUTION] Inner loop j=2. Comparing arr[2] (29) > arr[3] (10) -> True.",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [5, 14, 29, 10, 18],
+            left: -1,
+            right: -1,
+            mid: -1,
+            compareIdx: 2,
+            compareIdx2: 3,
+            swapState: false,
+          },
+        },
+      },
+      {
+        stepIndex: 6,
+        activeLine: 5,
+        explanation: "Since 29 > 10, elements swap. 29 moves to index 3.",
+        variables: [
+          { name: "i", value: 0, changed: false, focused: false },
+          { name: "j", value: 2, changed: false, focused: false },
+          { name: "arr[j]", value: 10, prevValue: 29, changed: true, focused: true },
+          { name: "arr[j+1]", value: 29, prevValue: 10, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "bubbleSort(arr, 5)", args: "arr[5], n=5", line: 5, active: true }],
+        consoleLog: "[MUTATION] Swapping arr[2] and arr[3].",
+        memoryState: {
+          type: "array",
+          data: {
+            array: [5, 14, 10, 29, 18],
+            left: -1,
+            right: -1,
+            mid: -1,
+            compareIdx: 2,
+            compareIdx2: 3,
+            swapState: true,
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: "tree_traversal",
+    title: "Tree Inorder Traversal",
+    language: "cpp",
+    code: `struct Node {
+    int data;
+    Node* left;
+    Node* right;
+};
+
+void inorder(Node* root) {
+    if (root == nullptr) return;
+    inorder(root->left);
+    cout << root->data << " ";
+    inorder(root->right);
+}`,
+    stdin: "Root: 10, Left: 5, Right: 15",
+    steps: [
+      {
+        stepIndex: 1,
+        activeLine: 7,
+        explanation: "Enter inorder traversal at Root node (10). Checked: root is not null.",
+        variables: [
+          { name: "root->val", value: 10, changed: true, focused: true },
+          { name: "recursion_depth", value: 1, changed: true, focused: true },
+        ],
+        callStack: [
+          { id: "f1", functionName: "inorder(Node* root)", args: "root=10 (Root)", line: 7, active: true },
+        ],
+        consoleLog: "[RECURSION] Pushed inorder(10) to call stack.",
+        memoryState: {
+          type: "tree",
+          data: {
+            nodes: [
+              { id: 10, val: 10, type: "root", state: "active" },
+              { id: 5, val: 5, type: "left", state: "unvisited" },
+              { id: 15, val: 15, type: "right", state: "unvisited" },
+            ],
+            activeNodeId: 10,
+          },
+        },
+      },
+      {
+        stepIndex: 2,
+        activeLine: 9,
+        explanation: "Recurse into the left child of root node (10). Invoking inorder(5).",
+        variables: [
+          { name: "root->val", value: 5, prevValue: 10, changed: true, focused: true },
+          { name: "recursion_depth", value: 2, prevValue: 1, changed: true, focused: true },
+        ],
+        callStack: [
+          { id: "f1", functionName: "inorder(Node* root)", args: "root=10", line: 9, active: false },
+          { id: "f2", functionName: "inorder(Node* root)", args: "root=5", line: 7, active: true },
+        ],
+        consoleLog: "[RECURSION] Pushed inorder(5) to call stack.",
+        memoryState: {
+          type: "tree",
+          data: {
+            nodes: [
+              { id: 10, val: 10, type: "root", state: "visited" },
+              { id: 5, val: 5, type: "left", state: "active" },
+              { id: 15, val: 15, type: "right", state: "unvisited" },
+            ],
+            activeNodeId: 5,
+          },
+        },
+      },
+      {
+        stepIndex: 3,
+        activeLine: 10,
+        explanation: "No left child for node (5). Print node (5) value to console output.",
+        variables: [
+          { name: "root->val", value: 5, changed: false, focused: true },
+          { name: "recursion_depth", value: 2, changed: false, focused: false },
+        ],
+        callStack: [
+          { id: "f1", functionName: "inorder(Node* root)", args: "root=10", line: 9, active: false },
+          { id: "f2", functionName: "inorder(Node* root)", args: "root=5", line: 10, active: true },
+        ],
+        consoleLog: "5 ",
+        memoryState: {
+          type: "tree",
+          data: {
+            nodes: [
+              { id: 10, val: 10, type: "root", state: "visited" },
+              { id: 5, val: 5, type: "left", state: "printed" },
+              { id: 15, val: 15, type: "right", state: "unvisited" },
+            ],
+            activeNodeId: 5,
+          },
+        },
+      },
+      {
+        stepIndex: 4,
+        activeLine: 10,
+        explanation: "Popping inorder(5) stack frame. Return to parent frame (inorder(10)) and print node (10) data.",
+        variables: [
+          { name: "root->val", value: 10, prevValue: 5, changed: true, focused: true },
+          { name: "recursion_depth", value: 1, prevValue: 2, changed: true, focused: true },
+        ],
+        callStack: [
+          { id: "f1", functionName: "inorder(Node* root)", args: "root=10", line: 10, active: true },
+        ],
+        consoleLog: "10 ",
+        memoryState: {
+          type: "tree",
+          data: {
+            nodes: [
+              { id: 10, val: 10, type: "root", state: "printed" },
+              { id: 5, val: 5, type: "left", state: "printed" },
+              { id: 15, val: 15, type: "right", state: "unvisited" },
+            ],
+            activeNodeId: 10,
+          },
+        },
+      },
+      {
+        stepIndex: 5,
+        activeLine: 11,
+        explanation: "Recurse into right child of root node (10). Invoking inorder(15).",
+        variables: [
+          { name: "root->val", value: 15, prevValue: 10, changed: true, focused: true },
+          { name: "recursion_depth", value: 2, prevValue: 1, changed: true, focused: true },
+        ],
+        callStack: [
+          { id: "f1", functionName: "inorder(Node* root)", args: "root=10", line: 11, active: false },
+          { id: "f3", functionName: "inorder(Node* root)", args: "root=15", line: 7, active: true },
+        ],
+        consoleLog: "[RECURSION] Pushed inorder(15) to call stack.",
+        memoryState: {
+          type: "tree",
+          data: {
+            nodes: [
+              { id: 10, val: 10, type: "root", state: "printed" },
+              { id: 5, val: 5, type: "left", state: "printed" },
+              { id: 15, val: 15, type: "right", state: "active" },
+            ],
+            activeNodeId: 15,
+          },
+        },
+      },
+      {
+        stepIndex: 6,
+        activeLine: 10,
+        explanation: "Inorder(15) active. Print node (15) value to console output.",
+        variables: [
+          { name: "root->val", value: 15, changed: false, focused: true },
+          { name: "recursion_depth", value: 2, changed: false, focused: false },
+        ],
+        callStack: [
+          { id: "f1", functionName: "inorder(Node* root)", args: "root=10", line: 11, active: false },
+          { id: "f3", functionName: "inorder(Node* root)", args: "root=15", line: 10, active: true },
+        ],
+        consoleLog: "15 ",
+        memoryState: {
+          type: "tree",
+          data: {
+            nodes: [
+              { id: 10, val: 10, type: "root", state: "printed" },
+              { id: 5, val: 5, type: "left", state: "printed" },
+              { id: 15, val: 15, type: "right", state: "printed" },
+            ],
+            activeNodeId: 15,
+          },
+        },
+      },
+    ],
+  },
+  {
+    id: "dp_paths",
+    title: "Dynamic Programming Grid Paths",
+    language: "cpp",
+    code: `int countPaths(int r, int c) {
+    int dp[4][4] = {0};
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) {
+            if (i == 0 || j == 0) dp[i][j] = 1;
+            else dp[i][j] = dp[i-1][j] + dp[i][j-1];
+        }
+    }
+    return dp[r-1][c-1];
+}`,
+    stdin: "Grid Size: 4x4",
+    steps: [
+      {
+        stepIndex: 1,
+        activeLine: 2,
+        explanation: "Initialize DP grid. Starting with baseline cell coordinates (0, 0) with value 1.",
+        variables: [
+          { name: "i", value: 0, changed: true, focused: true },
+          { name: "j", value: 0, changed: true, focused: true },
+          { name: "dp[i][j]", value: 1, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "countPaths(4, 4)", args: "r=4, c=4", line: 2, active: true }],
+        consoleLog: "[DP] Allocating 4x4 grid. Setting boundaries to 1.",
+        memoryState: {
+          type: "dp",
+          data: {
+            grid: [
+              [1, 0, 0, 0],
+              [0, 0, 0, 0],
+              [0, 0, 0, 0],
+              [0, 0, 0, 0],
+            ],
+            activeCell: [0, 0],
+            dependencies: [],
+          },
+        },
+      },
+      {
+        stepIndex: 2,
+        activeLine: 5,
+        explanation: "Boundary cell dp[0][1] receives value 1 since i=0.",
+        variables: [
+          { name: "i", value: 0, changed: false, focused: false },
+          { name: "j", value: 1, prevValue: 0, changed: true, focused: true },
+          { name: "dp[i][j]", value: 1, changed: false, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "countPaths(4, 4)", args: "r=4, c=4", line: 5, active: true }],
+        consoleLog: "[DP] Boundary cell dp[0][1] computed.",
+        memoryState: {
+          type: "dp",
+          data: {
+            grid: [
+              [1, 1, 0, 0],
+              [0, 0, 0, 0],
+              [0, 0, 0, 0],
+              [0, 0, 0, 0],
+            ],
+            activeCell: [0, 1],
+            dependencies: [],
+          },
+        },
+      },
+      {
+        stepIndex: 3,
+        activeLine: 6,
+        explanation: "Computing inner cell dp[1][1]. It depends on dp[0][1] (top) and dp[1][0] (left).",
+        variables: [
+          { name: "i", value: 1, prevValue: 0, changed: true, focused: true },
+          { name: "j", value: 1, changed: false, focused: true },
+          { name: "dp[i][j]", value: 2, prevValue: 0, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "countPaths(4, 4)", args: "r=4, c=4", line: 6, active: true }],
+        consoleLog: "[DP] Cell dp[1][1] = dp[0][1] (1) + dp[1][0] (1) = 2.",
+        memoryState: {
+          type: "dp",
+          data: {
+            grid: [
+              [1, 1, 0, 0],
+              [1, 2, 0, 0],
+              [0, 0, 0, 0],
+              [0, 0, 0, 0],
+            ],
+            activeCell: [1, 1],
+            dependencies: [
+              [0, 1],
+              [1, 0],
+            ],
+          },
+        },
+      },
+      {
+        stepIndex: 4,
+        activeLine: 6,
+        explanation: "Computing inner cell dp[1][2]. dp[1][2] = dp[0][2] (1) + dp[1][1] (2) = 3.",
+        variables: [
+          { name: "i", value: 1, changed: false, focused: false },
+          { name: "j", value: 2, prevValue: 1, changed: true, focused: true },
+          { name: "dp[i][j]", value: 3, prevValue: 0, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "countPaths(4, 4)", args: "r=4, c=4", line: 6, active: true }],
+        consoleLog: "[DP] Cell dp[1][2] = dp[0][2] (1) + dp[1][1] (2) = 3.",
+        memoryState: {
+          type: "dp",
+          data: {
+            grid: [
+              [1, 1, 1, 0],
+              [1, 2, 3, 0],
+              [0, 0, 0, 0],
+              [0, 0, 0, 0],
+            ],
+            activeCell: [1, 2],
+            dependencies: [
+              [0, 2],
+              [1, 1],
+            ],
+          },
+        },
+      },
+      {
+        stepIndex: 5,
+        activeLine: 6,
+        explanation: "Computing cell dp[2][2]. dp[2][2] = dp[1][2] (3) + dp[2][1] (3) = 6.",
+        variables: [
+          { name: "i", value: 2, prevValue: 1, changed: true, focused: true },
+          { name: "j", value: 2, changed: false, focused: true },
+          { name: "dp[i][j]", value: 6, prevValue: 0, changed: true, focused: true },
+        ],
+        callStack: [{ id: "f1", functionName: "countPaths(4, 4)", args: "r=4, c=4", line: 6, active: true }],
+        consoleLog: "[DP] Cell dp[2][2] = dp[1][2] (3) + dp[2][1] (3) = 6.",
+        memoryState: {
+          type: "dp",
+          data: {
+            grid: [
+              [1, 1, 1, 1],
+              [1, 2, 3, 4],
+              [1, 3, 6, 0],
+              [0, 0, 0, 0],
+            ],
+            activeCell: [2, 2],
+            dependencies: [
+              [1, 2],
+              [2, 1],
+            ],
+          },
+        },
+      },
+    ],
+  },
 ];
 
-const REPLAY_STEPS: ExecutionStep[] = [
-  {
-    stepIndex: 1,
-    activeLine: 6,
-    explanation: "Initializing variables: height = [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1]. Array size n = 12.",
-    variables: [
-      { name: "n", value: 12, changed: true },
-      { name: "left", value: 0, changed: false },
-      { name: "right", value: 11, changed: false },
-      { name: "leftMax", value: 0, changed: false },
-      { name: "rightMax", value: 0, changed: false },
-      { name: "totalWater", value: 0, changed: false },
-    ],
-    callStack: [{ functionName: "main()", args: "int argc, char** argv", line: 28 }, { functionName: "trapWater(vector<int>&)", args: "height[12]", line: 6 }],
-    memory: {
-      heightArray: [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1],
-      leftMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      rightMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      waterTrapped: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      activePointers: { left: 0, right: 11 },
-    },
-    consoleLogs: ["[SYSTEM] Memory allocated for vector<int> height at 0x7fff5fbff800", "[EXECUTION] Entered function trapWater()"],
-  },
-  {
-    stepIndex: 2,
-    activeLine: 8,
-    explanation: "Pointers initialized: left = 0 (val 0), right = 11 (val 1). leftMax = 0, rightMax = 0.",
-    variables: [
-      { name: "n", value: 12, changed: false },
-      { name: "left", value: 0, changed: true },
-      { name: "right", value: 11, changed: true },
-      { name: "leftMax", value: 0, changed: false },
-      { name: "rightMax", value: 0, changed: false },
-      { name: "totalWater", value: 0, changed: false },
-    ],
-    callStack: [{ functionName: "main()", args: "int argc, char** argv", line: 28 }, { functionName: "trapWater(vector<int>&)", args: "height[12]", line: 8 }],
-    memory: {
-      heightArray: [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1],
-      leftMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      rightMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      waterTrapped: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      activePointers: { left: 0, right: 11 },
-    },
-    consoleLogs: ["[SYSTEM] Memory allocated for vector<int> height at 0x7fff5fbff800", "[EXECUTION] Entered function trapWater()", "[LOOP] Iteration 1: Comparing height[0] (0) <= height[11] (1) -> TRUE"],
-  },
-  {
-    stepIndex: 3,
-    activeLine: 13,
-    explanation: "height[0] (0) >= leftMax (0). Update leftMax = 0. Increment left pointer to 1.",
-    variables: [
-      { name: "n", value: 12, changed: false },
-      { name: "left", value: 1, prevValue: 0, changed: true },
-      { name: "right", value: 11, changed: false },
-      { name: "leftMax", value: 0, changed: true },
-      { name: "rightMax", value: 0, changed: false },
-      { name: "totalWater", value: 0, changed: false },
-    ],
-    callStack: [{ functionName: "main()", args: "int argc, char** argv", line: 28 }, { functionName: "trapWater(vector<int>&)", args: "height[12]", line: 13 }],
-    memory: {
-      heightArray: [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1],
-      leftMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      rightMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      waterTrapped: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      activePointers: { left: 1, right: 11 },
-    },
-    consoleLogs: [
-      "[SYSTEM] Memory allocated for vector<int> height at 0x7fff5fbff800",
-      "[EXECUTION] Entered function trapWater()",
-      "[LOOP] Iteration 1: Comparing height[0] (0) <= height[11] (1) -> TRUE",
-      "[STATE] leftMax updated to 0. Pointer left moved to index 1.",
-    ],
-  },
-  {
-    stepIndex: 4,
-    activeLine: 14,
-    explanation: "At index 2 (val 0), leftMax = 1 > height[2]. Trapped water at index 2 = 1 - 0 = 1 unit!",
-    variables: [
-      { name: "n", value: 12, changed: false },
-      { name: "left", value: 2, prevValue: 1, changed: true },
-      { name: "right", value: 11, changed: false },
-      { name: "leftMax", value: 1, prevValue: 0, changed: true },
-      { name: "rightMax", value: 0, changed: false },
-      { name: "totalWater", value: 1, prevValue: 0, changed: true },
-    ],
-    callStack: [{ functionName: "main()", args: "int argc, char** argv", line: 28 }, { functionName: "trapWater(vector<int>&)", args: "height[12]", line: 14 }],
-    memory: {
-      heightArray: [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1],
-      leftMaxArray: [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      rightMaxArray: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      waterTrapped: [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      activePointers: { left: 2, right: 11, current: 2 },
-    },
-    consoleLogs: [
-      "[SYSTEM] Memory allocated for vector<int> height at 0x7fff5fbff800",
-      "[EXECUTION] Entered function trapWater()",
-      "[LOOP] Iteration 1: Comparing height[0] (0) <= height[11] (1) -> TRUE",
-      "[STATE] leftMax updated to 0. Pointer left moved to index 1.",
-      "[WATER] Trapped +1 unit of rainwater at index 2. Cumulative totalWater = 1.",
-    ],
-  },
-  {
-    stepIndex: 5,
-    activeLine: 18,
-    explanation: "Processing right pointer at index 10 (val 2). leftMax (2) vs rightMax (3). Trapping water across inner boundary.",
-    variables: [
-      { name: "n", value: 12, changed: false },
-      { name: "left", value: 4, prevValue: 2, changed: true },
-      { name: "right", value: 9, prevValue: 11, changed: true },
-      { name: "leftMax", value: 2, prevValue: 1, changed: true },
-      { name: "rightMax", value: 3, prevValue: 0, changed: true },
-      { name: "totalWater", value: 4, prevValue: 1, changed: true },
-    ],
-    callStack: [{ functionName: "main()", args: "int argc, char** argv", line: 28 }, { functionName: "trapWater(vector<int>&)", args: "height[12]", line: 18 }],
-    memory: {
-      heightArray: [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1],
-      leftMaxArray: [0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0],
-      rightMaxArray: [0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3],
-      waterTrapped: [0, 0, 1, 0, 1, 2, 0, 0, 0, 0, 0, 0],
-      activePointers: { left: 4, right: 9, current: 5 },
-    },
-    consoleLogs: [
-      "[SYSTEM] Memory allocated for vector<int> height at 0x7fff5fbff800",
-      "[EXECUTION] Entered function trapWater()",
-      "[LOOP] Iteration 1: Comparing height[0] (0) <= height[11] (1) -> TRUE",
-      "[STATE] leftMax updated to 0. Pointer left moved to index 1.",
-      "[WATER] Trapped +1 unit of rainwater at index 2. Cumulative totalWater = 1.",
-      "[WATER] Trapped +1 unit at idx 4 and +2 units at idx 5. Cumulative totalWater = 4.",
-    ],
-  },
-  {
-    stepIndex: 6,
-    activeLine: 22,
-    explanation: "Execution Complete! All boundary pointers met at peak element index 7. Final calculated answer: 6 units of trapped water.",
-    variables: [
-      { name: "n", value: 12, changed: false },
-      { name: "left", value: 7, prevValue: 4, changed: true },
-      { name: "right", value: 7, prevValue: 9, changed: true },
-      { name: "leftMax", value: 3, prevValue: 2, changed: true },
-      { name: "rightMax", value: 3, prevValue: 3, changed: false },
-      { name: "totalWater", value: 6, prevValue: 4, changed: true },
-    ],
-    callStack: [{ functionName: "main()", args: "int argc, char** argv", line: 28 }, { functionName: "trapWater(vector<int>&)", args: "height[12]", line: 22 }],
-    memory: {
-      heightArray: [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1],
-      leftMaxArray: [0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3],
-      rightMaxArray: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
-      waterTrapped: [0, 0, 1, 0, 1, 2, 1, 0, 0, 1, 0, 0],
-      activePointers: { left: 7, right: 7 },
-    },
-    consoleLogs: [
-      "[SYSTEM] Memory allocated for vector<int> height at 0x7fff5fbff800",
-      "[EXECUTION] Entered function trapWater()",
-      "[LOOP] Iteration 1: Comparing height[0] (0) <= height[11] (1) -> TRUE",
-      "[STATE] leftMax updated to 0. Pointer left moved to index 1.",
-      "[WATER] Trapped +1 unit of rainwater at index 2. Cumulative totalWater = 1.",
-      "[WATER] Trapped +1 unit at idx 4 and +2 units at idx 5. Cumulative totalWater = 4.",
-      "[RETURN] Return totalWater = 6. Function stack popped gracefully.",
-    ],
-  },
-];
-
-export default function StandaloneVisualizerPage() {
+export default function StandaloneExecutionVisualizer() {
+  const router = useRouter();
   const { user } = useAuth();
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState<1 | 2 | 0.5>(1);
-  const [isDarkMode, setIsDarkMode] = useState(true);
 
-  const currentStep = REPLAY_STEPS[currentStepIndex];
-  const totalSteps = REPLAY_STEPS.length;
+  // Selected Preset
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("binary_search");
+  const preset = PRESETS.find((p) => p.id === selectedPresetId) || PRESETS[0];
 
+  // Editor states
+  const [code, setCode] = useState<string>(preset.code);
+  const [stdin, setStdin] = useState<string>(preset.stdin);
+  const [stdout, setStdout] = useState<string>("Simulation initialized. Modify source and run to check details.");
+  const [isCompiling, setIsCompiling] = useState<boolean>(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+
+  // Timeline / Stepper states
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [speed, setSpeed] = useState<0.25 | 0.5 | 1 | 2>(1);
+
+  // Sequential Animation Phases
+  // 1. Highlight Code
+  // 2. Animate Variables
+  // 3. Animate Memory
+  // 4. Update Output
+  // 5. Advance Timeline
+  const PHASES = ["line", "var_val", "mem", "out", "timeline"] as const;
+  type AnimationPhase = (typeof PHASES)[number] | "idle";
+  const [currentPhase, setCurrentPhase] = useState<AnimationPhase>("idle");
+  const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Interactive rendering states
+  const [highlightedLine, setHighlightedLine] = useState<number>(-1);
+  const [focusedVariables, setFocusedVariables] = useState<string[]>([]);
+  const [memoryState, setMemoryState] = useState<any>(null);
+  const [callStack, setCallStack] = useState<CallStackFrame[]>([]);
+
+  const currentStep = preset.steps[currentStepIndex] || preset.steps[0];
+  const totalSteps = preset.steps.length;
+
+  // Handle Preset Change
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const newPreset = PRESETS.find((p) => p.id === presetId) || PRESETS[0];
+    setCode(newPreset.code);
+    setStdin(newPreset.stdin);
+    setCurrentStepIndex(0);
+    setIsPlaying(false);
+    setCurrentPhase("idle");
+    setStdout("Successfully compiled. Stepping sequence ready.");
+  };
+
+  const handleRunAgain = () => {
+    setIsCompiling(true);
+    setStdout("Compiling source code using GCC 13.2...");
+    setTimeout(() => {
+      setIsCompiling(false);
+      setStdout(
+        `[SUCCESS] Code compiled successfully.\n[SYSTEM] Replay steps: ${totalSteps} execution cycles loaded.`
+      );
+      setCurrentStepIndex(0);
+      setCurrentPhase("idle");
+    }, 1200);
+  };
+
+  // Keyboard Event Hooks
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && e.target === document.body) {
+        e.preventDefault();
+        setIsPlaying((p) => !p);
+      }
+      if (e.code === "ArrowRight" && e.target === document.body) {
+        e.preventDefault();
+        handleNextStep();
+      }
+      if (e.code === "ArrowLeft" && e.target === document.body) {
+        e.preventDefault();
+        handlePrevStep();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentStepIndex, totalSteps]);
+
+  // Synchronize state when timeline changes directly
+  useEffect(() => {
+    syncStepState(currentStepIndex);
+  }, [currentStepIndex, selectedPresetId]);
+
+  const syncStepState = (idx: number) => {
+    const step = preset.steps[idx] || preset.steps[0];
+    setHighlightedLine(step.activeLine);
+    setFocusedVariables(step.variables.filter((v) => v.focused).map((v) => v.name));
+    setMemoryState(step.memoryState.data);
+    setCallStack(step.callStack);
+  };
+
+  // Step-by-step sequential animation loop
+  useEffect(() => {
     if (isPlaying) {
-      interval = setInterval(() => {
+      runSequence(currentStepIndex, () => {
         setCurrentStepIndex((prev) => {
           if (prev >= totalSteps - 1) {
             setIsPlaying(false);
@@ -248,18 +873,84 @@ export default function StandaloneVisualizerPage() {
           }
           return prev + 1;
         });
-      }, 2000 / speed);
+      });
+    } else {
+      if (phaseTimerRef.current) {
+        clearTimeout(phaseTimerRef.current);
+      }
+      setCurrentPhase("idle");
     }
-    return () => clearInterval(interval);
-  }, [isPlaying, totalSteps, speed]);
+    return () => {
+      if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    };
+  }, [isPlaying, currentStepIndex]);
 
-  const handleNext = () => {
+  const runSequence = (stepIdx: number, onCompleteSequence: () => void) => {
+    const step = preset.steps[stepIdx];
+    if (!step) return;
+
+    const baseDurations = {
+      line: 400,
+      var_val: 500,
+      mem: 500,
+      out: 500,
+      timeline: 400,
+    };
+
+    const duration = (phase: keyof typeof baseDurations) => baseDurations[phase] / speed;
+
+    // Phase 1: Highlight Code
+    setCurrentPhase("line");
+    setHighlightedLine(step.activeLine);
+    setFocusedVariables([]);
+
+    // Phase 2: Animate Variables
+    phaseTimerRef.current = setTimeout(() => {
+      setCurrentPhase("var_val");
+      setFocusedVariables(step.variables.filter((v) => v.focused).map((v) => v.name));
+
+      // Phase 3: Animate Memory
+      phaseTimerRef.current = setTimeout(() => {
+        setCurrentPhase("mem");
+        setMemoryState(step.memoryState.data);
+        setCallStack(step.callStack);
+
+        // Phase 4: Update Output
+        phaseTimerRef.current = setTimeout(() => {
+          setCurrentPhase("out");
+          let stdoutLogs = "";
+          for (let i = 0; i <= stepIdx; i++) {
+            const log = preset.steps[i]?.consoleLog || "";
+            if (!log.startsWith("[")) {
+              stdoutLogs += log;
+            } else {
+              stdoutLogs += (stdoutLogs ? "\n" : "") + log;
+            }
+          }
+          setStdout(stdoutLogs);
+
+          // Phase 5: Advance Timeline
+          phaseTimerRef.current = setTimeout(() => {
+            setCurrentPhase("timeline");
+            phaseTimerRef.current = setTimeout(() => {
+              setCurrentPhase("idle");
+              onCompleteSequence();
+            }, duration("timeline"));
+          }, duration("out"));
+        }, duration("mem"));
+      }, duration("var_val"));
+    }, duration("line"));
+  };
+
+  const handleNextStep = () => {
+    setIsPlaying(false);
     if (currentStepIndex < totalSteps - 1) {
       setCurrentStepIndex((prev) => prev + 1);
     }
   };
 
-  const handlePrev = () => {
+  const handlePrevStep = () => {
+    setIsPlaying(false);
     if (currentStepIndex > 0) {
       setCurrentStepIndex((prev) => prev - 1);
     }
@@ -268,56 +959,50 @@ export default function StandaloneVisualizerPage() {
   const handleReplay = () => {
     setIsPlaying(false);
     setCurrentStepIndex(0);
+    syncStepState(0);
+  };
+
+  const handleBackToStudio = () => {
+    router.push("/studio");
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans select-none transition-colors duration-300 ${isDarkMode ? "bg-[#09090b] text-white" : "bg-gray-950 text-gray-100"}`}>
-      {/* 1. TOP NAVIGATION BAR (Extremely Minimal & Distraction-Free) */}
-      <header className="h-16 bg-[#0c0c0e]/95 backdrop-blur-xl border-b border-white/10 px-4 lg:px-6 flex items-center justify-between z-40">
-        {/* Left: Back to Workspace & Problem Title */}
+    <div className={`h-screen w-screen flex flex-col font-sans select-none overflow-hidden transition-colors duration-300 ${isDarkMode ? "bg-[#09090b] text-white" : "bg-gray-950 text-gray-100"}`}>
+      {/* 1. TOP BAR */}
+      <header className="h-16 bg-[#0c0c0e]/95 backdrop-blur-xl border-b border-white/10 px-4 flex items-center justify-between z-40 shrink-0">
         <div className="flex items-center gap-4">
-          <Link
-            href="/workspace"
+          <button
+            onClick={handleBackToStudio}
             className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-all flex items-center gap-2 text-xs font-semibold cursor-pointer border border-white/10"
           >
-            <ArrowLeft className="w-4 h-4 text-cyan-400" />
-            <span className="hidden sm:inline">Back to Workspace</span>
-          </Link>
-
+            <ArrowLeft className="w-4 h-4 text-purple-400" />
+            <span>Back to Studio</span>
+          </button>
           <div className="h-4 w-px bg-white/10 hidden sm:block" />
-
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
-                Trapping Rain Water
-              </h1>
-              <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-semibold">
-                Execution Visualizer
-              </span>
-            </div>
-            <p className="text-[10px] text-gray-400 hidden md:block">
-              Standalone Step-by-Step Learning Environment
-            </p>
-          </div>
+          <h1 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <span>Interactive Execution Player</span>
+          </h1>
         </div>
 
-        {/* Center: Execution Status Indicator */}
-        <div className="hidden lg:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#141418] border border-white/10 text-xs font-mono">
-          <span className={`w-2 h-2 rounded-full ${isPlaying ? "bg-green-400 animate-ping" : "bg-amber-400"}`} />
-          <span className="text-gray-300">
-            {isPlaying ? "Replay Active" : currentStepIndex === totalSteps - 1 ? "Replay Complete" : "Replay Paused"}
-          </span>
-          <span className="text-gray-500">•</span>
-          <span className="text-cyan-400 font-bold">Step {currentStep.stepIndex} of {totalSteps}</span>
+        {/* Preset Selector */}
+        <div className="flex items-center gap-2 bg-[#121215] px-3 py-1.5 rounded-xl border border-white/10 text-xs">
+          <span className="text-gray-400 hidden md:inline">Lesson:</span>
+          <select
+            value={selectedPresetId}
+            onChange={(e) => handlePresetChange(e.target.value)}
+            className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer text-xs"
+          >
+            {PRESETS.map((p) => (
+              <option key={p.id} value={p.id} className="bg-[#121215] text-white">
+                {p.title} ({p.language === "cpp" ? "C++" : p.language.toUpperCase()})
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Right: Language Selector Indicator, Theme Toggle, Profile */}
+        {/* Profile / Theme */}
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#16161a] border border-white/10 rounded-xl text-xs font-mono text-cyan-300">
-            <Code2 className="w-3.5 h-3.5 text-cyan-400" />
-            <span>C++ (GCC 13.2)</span>
-          </div>
-
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer border border-white/10"
@@ -325,86 +1010,109 @@ export default function StandaloneVisualizerPage() {
           >
             {isDarkMode ? <Moon className="w-4 h-4 text-purple-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
           </button>
-
-          <div className="flex items-center gap-2 p-1.5 rounded-xl bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2 p-1 bg-white/5 border border-white/10 rounded-xl">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5">
               <div className="w-full h-full bg-[#121215] rounded-[6px] flex items-center justify-center font-bold text-xs text-cyan-300">
                 {user?.name ? user.name.charAt(0).toUpperCase() : "S"}
               </div>
             </div>
-            <span className="text-xs font-semibold text-white hidden xl:inline">{user?.name || "Student"}</span>
           </div>
         </div>
       </header>
 
-      {/* 2. MAIN APPLICATION CONTENT AREA */}
-      <div className="flex-1 p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-y-auto max-w-[1920px] mx-auto w-full">
-        {/* LEFT COLUMN: Read-only Syntax Highlighted Code Panel (5 Columns) */}
-        <div className="lg:col-span-5 bg-[#121215] border border-white/10 rounded-3xl p-5 shadow-2xl flex flex-col justify-between overflow-hidden">
-          <div>
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+      {/* 2. DUAL WORKSPACE SPLIT AREA */}
+      <div className="flex-1 flex gap-6 p-4 overflow-hidden w-full max-w-[1920px] mx-auto">
+        
+        {/* LEFT COLUMN: 40% Width. Monaco Editor (70%), Input (15%), Output (15%) */}
+        <div className="w-[40%] flex flex-col gap-4 h-full overflow-hidden">
+          
+          {/* Editable Editor (70% Height) */}
+          <div className="h-[68%] flex flex-col bg-[#121215] border border-white/10 rounded-2xl p-4 overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-2.5 shrink-0">
               <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <Code2 className="w-4 h-4 text-cyan-400" />
-                <span>Program Source Code</span>
+                <Code2 className="w-4 h-4 text-purple-400" />
+                <span>Source Code (Editable)</span>
               </div>
-              <span className="text-[10px] font-mono text-gray-400 bg-white/5 px-2 py-0.5 rounded-md">Read-Only View</span>
+              <button
+                onClick={handleRunAgain}
+                disabled={isCompiling}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-bold text-[11px] flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isCompiling ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <PlayCircle className="w-3.5 h-3.5" />
+                )}
+                <span>Run Again</span>
+              </button>
             </div>
 
-            {/* Explanation box for current step */}
-            <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-2xl text-xs text-purple-300 font-medium leading-relaxed flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold block mb-0.5 text-purple-200">Step Explanation:</span>
-                {currentStep.explanation}
+            {/* Monaco layout body */}
+            <div className="flex-1 relative flex overflow-hidden border border-white/5 bg-[#09090b] rounded-xl p-2 font-mono text-xs">
+              <div className="text-gray-600 text-right pr-3 pl-1 select-none border-r border-white/5 space-y-1 py-1">
+                {code.split("\n").map((_, i) => (
+                  <div key={i} className={`h-6 leading-6 ${highlightedLine === i + 1 ? "text-purple-400 font-bold font-mono" : ""}`}>
+                    {i + 1}
+                  </div>
+                ))}
               </div>
-            </div>
-
-            {/* Code Lines with Active Highlight */}
-            <div className="font-mono text-xs space-y-0.5 overflow-x-auto p-2 bg-[#09090b] rounded-2xl border border-white/5 max-h-[500px]">
-              {PROGRAM_CODE.map((item) => {
-                const isActive = item.line === currentStep.activeLine;
-                return (
-                  <motion.div
-                    key={item.line}
-                    animate={{ backgroundColor: isActive ? "rgba(168, 85, 247, 0.2)" : "transparent" }}
-                    transition={{ duration: 0.2 }}
-                    className={`flex items-center px-2 py-1 rounded-lg transition-colors ${
-                      isActive ? "border-l-4 border-purple-500 text-white font-bold shadow-sm shadow-purple-500/30" : "text-gray-400 hover:text-gray-200"
-                    }`}
-                  >
-                    <span className="w-8 shrink-0 text-[10px] text-gray-600 select-none text-right pr-3 font-mono">
-                      {item.line}
-                    </span>
-                    <span className="whitespace-pre truncate">{item.text}</span>
-                  </motion.div>
-                );
-              })}
+              <div className="flex-1 relative overflow-auto py-1 px-3">
+                <textarea
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="w-full h-full bg-transparent text-gray-200 focus:outline-none resize-none leading-6 font-mono whitespace-pre selection:bg-purple-500/30"
+                  spellCheck={false}
+                />
+                {highlightedLine > 0 && (
+                  <div
+                    className="absolute left-0 right-0 bg-purple-500/10 border-l-4 border-purple-500 pointer-events-none transition-all duration-300"
+                    style={{
+                      top: `${(highlightedLine - 1) * 24 + 4}px`,
+                      height: "24px",
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Bottom helper footnote */}
-          <div className="pt-4 border-t border-white/5 mt-4 text-[11px] text-gray-500 flex items-center justify-between font-mono">
-            <span>Code Visualizer Replay Engine</span>
-            <span>Focus: Execution Logic</span>
+          {/* Program Input (15% Height) */}
+          <div className="h-[14%] flex flex-col bg-[#121215] border border-white/10 rounded-2xl p-3 overflow-hidden shadow-xl">
+            <div className="text-[11px] font-bold text-white mb-1.5 flex items-center gap-1.5 shrink-0">
+              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Program Input (stdin)</span>
+            </div>
+            <textarea
+              value={stdin}
+              onChange={(e) => setStdin(e.target.value)}
+              className="flex-1 w-full bg-[#09090b] border border-white/5 rounded-xl p-2 font-mono text-[11px] text-gray-300 focus:outline-none focus:border-cyan-500 resize-none leading-normal selection:bg-cyan-500/30"
+            />
           </div>
+
+          {/* Program Output (15% Height) */}
+          <div className="h-[14%] flex flex-col bg-[#121215] border border-white/10 rounded-2xl p-3 overflow-hidden shadow-xl">
+            <div className="text-[11px] font-bold text-white mb-1.5 flex items-center gap-1.5 shrink-0">
+              <Terminal className="w-3.5 h-3.5 text-green-400" />
+              <span>Program Output (stdout)</span>
+            </div>
+            <div className="flex-1 bg-[#09090b] border border-white/5 rounded-xl p-2 font-mono text-[11px] text-gray-400 overflow-y-auto leading-relaxed select-text">
+              {stdout.split("\n").map((line, i) => (
+                <div key={i} className={line.startsWith("[SUCCESS]") ? "text-green-400 font-semibold" : ""}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
-        {/* RIGHT COLUMN: Execution Analytics & Visual Panels (7 Columns) */}
-        <div className="lg:col-span-7 space-y-6 flex flex-col justify-between">
-          {/* TOP RIGHT: Execution Timeline Stepper & Playback Controls */}
-          <div className="bg-[#121215] border border-white/10 rounded-3xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span>Execution Timeline & Controls</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-cyan-400">
-                <span>Step {currentStep.stepIndex} / {totalSteps}</span>
-              </div>
-            </div>
-
-            {/* Timeline Scrubber */}
-            <div className="space-y-1">
+        {/* RIGHT COLUMN: 60% Width. Timeline, Variables + Stack, Memory Visualization */}
+        <div className="w-[60%] flex flex-col gap-4 h-full overflow-hidden">
+          
+          {/* SECTION 1: Compressed Professional Playback Timeline Card (approx 88px height) */}
+          <div className="h-[88px] bg-[#121215] border border-white/10 rounded-2xl p-3.5 shadow-2xl flex flex-col justify-between shrink-0 overflow-hidden">
+            {/* Scrubber slider and Step counts */}
+            <div className="flex items-center gap-4">
               <input
                 type="range"
                 min={0}
@@ -414,68 +1122,64 @@ export default function StandaloneVisualizerPage() {
                   setIsPlaying(false);
                   setCurrentStepIndex(Number(e.target.value));
                 }}
-                className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                className="flex-1 h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
-              <div className="flex justify-between text-[10px] font-mono text-gray-500 px-1">
-                <span>Init (Step 1)</span>
-                <span>Loop Iterations (Steps 2-5)</span>
-                <span>Complete (Step 6)</span>
-              </div>
+              <span className="text-[10px] font-mono font-bold text-purple-400 shrink-0">
+                Step {currentStepIndex + 1} / {totalSteps}
+              </span>
             </div>
 
-            {/* Playback Button Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-              <div className="flex items-center gap-2">
+            {/* Stepper controls */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleReplay}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer border border-white/10"
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer border border-white/5"
                   title="Replay from start"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  onClick={handlePrev}
+                  onClick={handlePrevStep}
                   disabled={currentStepIndex === 0}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white disabled:opacity-40 transition-colors cursor-pointer border border-white/10"
-                  title="Previous Step"
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white disabled:opacity-40 transition-colors cursor-pointer border border-white/5"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => setIsPlaying(!isPlaying)}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/25 cursor-pointer active:scale-95 transition-all"
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer"
                 >
-                  {isPlaying ? (
-                    <>
-                      <Pause className="w-4 h-4 fill-white" />
-                      <span>Pause</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-white" />
-                      <span>Play Replay</span>
-                    </>
-                  )}
+                  {isPlaying ? <Pause className="w-3 h-3 fill-white" /> : <Play className="w-3 h-3 fill-white" />}
+                  <span>{isPlaying ? "Pause" : "Play"}</span>
                 </button>
                 <button
-                  onClick={handleNext}
+                  onClick={handleNextStep}
                   disabled={currentStepIndex === totalSteps - 1}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white disabled:opacity-40 transition-colors cursor-pointer border border-white/10"
-                  title="Next Step"
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white disabled:opacity-40 transition-colors cursor-pointer border border-white/5"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Speed Controller */}
-              <div className="flex items-center gap-1 bg-[#18181c] p-1 rounded-xl border border-white/10 text-xs font-mono">
-                <span className="px-2 text-[10px] text-gray-400">Speed:</span>
+              {/* Phase progress logger */}
+              <div className="text-[9px] font-mono text-gray-500 hidden md:block">
+                {currentPhase === "line" && "Line Highlighting"}
+                {currentPhase === "var_val" && "Variable Updates"}
+                {currentPhase === "mem" && "Heap Sync"}
+                {currentPhase === "out" && "Output Logged"}
+                {currentPhase === "timeline" && "Advancing Stepper"}
+                {currentPhase === "idle" && "Idle"}
+              </div>
+
+              {/* speed control */}
+              <div className="flex items-center gap-1 bg-[#18181c] p-0.5 rounded-lg border border-white/10 text-[9px] font-mono">
                 {([0.5, 1, 2] as const).map((spd) => (
                   <button
                     key={spd}
                     onClick={() => setSpeed(spd)}
-                    className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      speed === spd ? "bg-cyan-500 text-black font-bold" : "text-gray-400 hover:text-white"
+                    className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                      speed === spd ? "bg-purple-600 text-white font-bold" : "text-gray-400 hover:text-white"
                     }`}
                   >
                     {spd}x
@@ -485,71 +1189,73 @@ export default function StandaloneVisualizerPage() {
             </div>
           </div>
 
-          {/* MIDDLE RIGHT: Variable State Inspector & Call Stack (Grid 2 Cols) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Variable State Inspector */}
-            <div className="bg-[#121215] border border-white/10 rounded-3xl p-5 shadow-2xl space-y-3">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-white">
-                  <Cpu className="w-4 h-4 text-cyan-400" />
-                  <span>Variable Inspector</span>
+          {/* SECTION 2: Variables Inspector + Call Stack (Side-by-side, 150px height) */}
+          <div className="h-[150px] grid grid-cols-2 gap-4 shrink-0 overflow-hidden">
+            
+            {/* Variable Inspector */}
+            <div className="h-full flex flex-col bg-[#121215] border border-white/10 rounded-2xl p-3.5 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2 shrink-0">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                  <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Variables</span>
                 </div>
-                <span className="text-[10px] font-mono text-cyan-400">Active Scope</span>
               </div>
 
-              <div className="space-y-2 font-mono text-xs">
-                {currentStep.variables.map((v) => (
-                  <div
-                    key={v.name}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
-                      v.changed
-                        ? "bg-purple-500/15 border-purple-500/40 text-white shadow-md shadow-purple-500/10"
-                        : "bg-[#16161a] border-white/5 text-gray-300"
-                    }`}
-                  >
-                    <span className="text-gray-400">{v.name}</span>
-                    <div className="flex items-center gap-2">
-                      {v.prevValue !== undefined && v.changed && (
-                        <span className="text-[10px] text-gray-500 line-through">{v.prevValue}</span>
-                      )}
-                      <span className={`font-bold ${v.changed ? "text-purple-300 text-sm" : "text-cyan-400"}`}>
-                        {v.value}
-                      </span>
+              {/* Two Column Grid for Variables */}
+              <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 pr-1">
+                {currentStep.variables.map((v) => {
+                  const isFocused = focusedVariables.includes(v.name);
+                  return (
+                    <div
+                      key={v.name}
+                      className={`px-2.5 py-1.5 rounded-xl border flex items-center justify-between transition-all duration-300 ${
+                        v.changed && isFocused
+                          ? "bg-purple-500/10 border-purple-500/30 text-white"
+                          : "bg-[#09090b] border-white/5 text-gray-400"
+                      }`}
+                    >
+                      <span className="font-mono text-[10px]">{v.name}</span>
+                      <div className="font-mono flex items-center gap-1.5 text-[10px]">
+                        {v.prevValue !== undefined && v.changed && (
+                          <span className="text-[9px] text-gray-600 line-through">{v.prevValue}</span>
+                        )}
+                        <span className={`font-bold ${v.changed && isFocused ? "text-purple-300" : "text-cyan-400"}`}>
+                          {v.value}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* Call Stack Panel */}
-            <div className="bg-[#121215] border border-white/10 rounded-3xl p-5 shadow-2xl space-y-3">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-white">
-                  <Layers className="w-4 h-4 text-indigo-400" />
+            {/* Call Stack Frame */}
+            <div className="h-full flex flex-col bg-[#121215] border border-white/10 rounded-2xl p-3.5 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2 shrink-0">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                  <Layers className="w-3.5 h-3.5 text-indigo-400" />
                   <span>Call Stack</span>
                 </div>
-                <span className="text-[10px] font-mono text-indigo-400">{currentStep.callStack.length} Frames</span>
               </div>
 
-              <div className="space-y-2 font-mono text-xs">
-                <AnimatePresence>
-                  {currentStep.callStack.map((frame, idx) => (
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                <AnimatePresence mode="popLayout">
+                  {callStack.map((frame) => (
                     <motion.div
-                      key={frame.functionName}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className={`p-3 rounded-xl border flex items-center justify-between ${
-                        idx === currentStep.callStack.length - 1
-                          ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-500/40 text-white shadow-md"
-                          : "bg-[#16161a] border-white/5 text-gray-400"
+                      key={frame.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className={`px-2.5 py-1.5 rounded-xl border flex items-center justify-between font-mono text-[10px] ${
+                        frame.active
+                          ? "bg-indigo-500/15 border-indigo-500/30 text-white"
+                          : "bg-[#09090b] border-white/5 text-gray-500"
                       }`}
                     >
-                      <div>
-                        <div className="font-bold text-cyan-300 text-xs">{frame.functionName}</div>
-                        <div className="text-[10px] text-gray-400 truncate mt-0.5">{frame.args}</div>
+                      <div className="truncate">
+                        <span className="font-bold text-cyan-300">{frame.functionName}</span>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 bg-black/40 rounded border border-white/10 text-gray-400">
+                      <span className="text-[9px] px-1 py-0.5 bg-black/40 rounded border border-white/10 text-gray-400">
                         Line {frame.line}
                       </span>
                     </motion.div>
@@ -557,88 +1263,163 @@ export default function StandaloneVisualizerPage() {
                 </AnimatePresence>
               </div>
             </div>
+
           </div>
 
-          {/* BOTTOM RIGHT: Memory & Visual Array Representation */}
-          <div className="bg-[#121215] border border-white/10 rounded-3xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+          {/* SECTION 3: Expanded Memory Visualization (Hero visual component, fills rest of space) */}
+          <div className="flex-1 bg-[#121215] border border-white/10 rounded-2xl p-4 overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2 shrink-0">
               <div className="flex items-center gap-2 text-xs font-bold text-white">
                 <Database className="w-4 h-4 text-green-400" />
-                <span>Memory Allocation & Array Visualization</span>
+                <span>Heap Memory State (Hero Panel)</span>
               </div>
-              <span className="text-[10px] font-mono text-green-400">Vector&lt;int&gt; Heap View</span>
+              <span className="text-[10px] font-mono text-green-400">Visual mapping</span>
             </div>
 
-            {/* Interactive Height Array Visualizer Bar */}
-            <div className="space-y-2">
-              <div className="text-[11px] text-gray-400 font-medium flex items-center justify-between">
-                <span>Height Elevation & Trapped Water (Indices 0..11)</span>
-                <span className="text-cyan-400 font-mono text-[10px]">Pointers: L (Left), R (Right)</span>
-              </div>
-              <div className="h-32 bg-[#09090b] p-3 rounded-2xl border border-white/5 flex items-end justify-between gap-1 sm:gap-2">
-                {currentStep.memory.heightArray.map((h, i) => {
-                  const trapped = currentStep.memory.waterTrapped[i] || 0;
-                  const isLeft = currentStep.memory.activePointers.left === i;
-                  const isRight = currentStep.memory.activePointers.right === i;
+            {/* Adaptive layout container fills rest of card */}
+            <div className="flex-1 flex items-center justify-center overflow-y-auto">
+              {/* Array memory layout representation */}
+              {memoryState && (selectedPresetId === "binary_search" || selectedPresetId === "bubble_sort") && (
+                <div className="flex items-end justify-around gap-2 w-full max-w-xl h-44 pt-6 relative">
+                  {memoryState.array.map((h: number, idx: number) => {
+                    const isLeft = memoryState.left === idx;
+                    const isRight = memoryState.right === idx;
+                    const isMid = memoryState.mid === idx;
+                    const isComparing = memoryState.compareIdx === idx || memoryState.compareIdx2 === idx;
+                    const isSwapped = memoryState.swapState && isComparing;
 
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end relative group">
-                      {/* Pointer Badge */}
-                      <div className="absolute -top-6 flex gap-0.5 text-[9px] font-bold font-mono">
-                        {isLeft && <span className="px-1 py-0.5 bg-cyan-500 text-black rounded animate-bounce">L</span>}
-                        {isRight && <span className="px-1 py-0.5 bg-purple-500 text-white rounded animate-bounce">R</span>}
-                      </div>
+                    return (
+                      <div key={idx} className="flex-1 flex flex-col items-center gap-1 h-full justify-end relative">
+                        {/* pointer tag markers */}
+                        <div className="absolute -top-7 flex gap-0.5 text-[9px] font-bold font-mono">
+                          {isLeft && <span className="px-1 py-0.5 bg-cyan-500 text-black rounded shadow animate-bounce">L</span>}
+                          {isMid && <span className="px-1 py-0.5 bg-purple-500 text-white rounded shadow animate-bounce">M</span>}
+                          {isRight && <span className="px-1 py-0.5 bg-pink-500 text-white rounded shadow animate-bounce">R</span>}
+                        </div>
 
-                      {/* Trapped Water Bar Portion */}
-                      {trapped > 0 && (
+                        {/* Array Cell block with animated swap states */}
                         <motion.div
-                          initial={{ height: 0 }}
-                          animate={{ height: `${trapped * 24}px` }}
-                          className="w-full bg-cyan-400/80 rounded-t border-t border-cyan-200 shadow-sm shadow-cyan-400/50 flex items-center justify-center text-[9px] font-bold text-black"
+                          layout
+                          className={`w-full rounded-xl flex items-center justify-center font-mono font-bold border transition-all text-xs ${
+                            isSwapped
+                              ? "bg-amber-500 text-black border-amber-300 shadow-lg shadow-amber-500/30 scale-105"
+                              : isComparing
+                              ? "bg-purple-500 text-white border-purple-300 shadow-md shadow-purple-500/30 animate-pulse"
+                              : "bg-gray-800 text-gray-300 border-white/10"
+                          }`}
+                          style={{ height: `${Math.max(32, h * 3.5) + 20}px` }}
+                          transition={{ type: "spring", stiffness: 350, damping: 25 }}
                         >
-                          +{trapped}
+                          {h}
                         </motion.div>
-                      )}
-
-                      {/* Elevation Block */}
-                      <div
-                        style={{ height: `${Math.max(8, h * 24)}px` }}
-                        className={`w-full rounded-b flex items-center justify-center text-[10px] font-mono font-bold transition-all ${
-                          isLeft || isRight
-                            ? "bg-gradient-to-t from-purple-600 to-indigo-500 text-white border border-purple-300 shadow-lg shadow-purple-500/40"
-                            : "bg-gray-800 text-gray-300 border border-white/10"
-                        }`}
-                      >
-                        {h}
+                        <span className="text-[9px] font-mono text-gray-500 mt-1">{idx}</span>
                       </div>
-
-                      <span className="text-[9px] font-mono text-gray-500 mt-1">{i}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* BOTTOM CONSOLE OUTPUT REPLAY */}
-          <div className="bg-[#121215] border border-white/10 rounded-3xl p-5 shadow-2xl space-y-3">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-              <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <Terminal className="w-4 h-4 text-amber-400" />
-                <span>Synchronized Console Replay</span>
-              </div>
-              <span className="text-[10px] font-mono text-gray-400">stdout</span>
-            </div>
-
-            <div className="p-3 bg-[#09090b] rounded-2xl border border-white/5 font-mono text-xs space-y-1 max-h-32 overflow-y-auto text-gray-300">
-              {currentStep.consoleLogs.map((log, index) => (
-                <div key={index} className={log.includes("[WATER]") ? "text-cyan-300 font-bold" : log.includes("[RETURN]") ? "text-green-400 font-bold" : "text-gray-400"}>
-                  {log}
+                    );
+                  })}
                 </div>
-              ))}
+              )}
+
+              {/* Tree memory representation */}
+              {memoryState && selectedPresetId === "tree_traversal" && (
+                <div className="flex flex-col items-center gap-4 w-full max-w-sm py-4 relative font-mono text-xs">
+                  {(() => {
+                    const rootNode = memoryState.nodes.find((n: any) => n.type === "root");
+                    const leftNode = memoryState.nodes.find((n: any) => n.type === "left");
+                    const rightNode = memoryState.nodes.find((n: any) => n.type === "right");
+
+                    return (
+                      <>
+                        <div
+                          className={`w-12 h-12 rounded-full flex items-center justify-center font-extrabold border-2 shadow transition-all ${
+                            rootNode.state === "active"
+                              ? "bg-cyan-500 text-black border-cyan-300 shadow-cyan-500/50 scale-105 animate-pulse"
+                              : rootNode.state === "printed"
+                              ? "bg-green-500 text-black border-green-300 shadow-green-500/30"
+                              : rootNode.state === "visited"
+                              ? "bg-purple-500 text-white border-purple-300"
+                              : "bg-gray-800 text-gray-300 border-white/10"
+                          }`}
+                        >
+                          {rootNode.val}
+                        </div>
+
+                        <div className="flex justify-between w-full px-8 relative">
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 shadow transition-all ${
+                              leftNode.state === "active"
+                                ? "bg-cyan-500 text-black border-cyan-300 shadow-cyan-500/50 scale-105 animate-pulse"
+                                : leftNode.state === "printed"
+                                ? "bg-green-500 text-black border-green-300"
+                                : "bg-gray-800 text-gray-300 border-white/10"
+                            }`}
+                          >
+                            {leftNode.val}
+                          </div>
+
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 shadow transition-all ${
+                              rightNode.state === "active"
+                                ? "bg-cyan-500 text-black border-cyan-300 shadow-cyan-500/50 scale-105 animate-pulse"
+                                : rightNode.state === "printed"
+                                ? "bg-green-500 text-black border-green-300"
+                                : "bg-gray-800 text-gray-300 border-white/10"
+                            }`}
+                          >
+                            {rightNode.val}
+                          </div>
+
+                          <svg className="absolute inset-0 w-full h-full pointer-events-none -z-10" style={{ minHeight: "65px" }}>
+                            <line x1="50%" y1="-10px" x2="25%" y2="20px" stroke="rgba(255,255,255,0.15)" strokeWidth="2" />
+                            <line x1="50%" y1="-10px" x2="75%" y2="20px" stroke="rgba(255,255,255,0.15)" strokeWidth="2" />
+                          </svg>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* DP memory representation */}
+              {memoryState && selectedPresetId === "dp_paths" && (
+                <div className="flex flex-col gap-2 items-center font-mono text-xs w-full py-2">
+                  <div className="grid grid-cols-4 gap-2">
+                    {memoryState.grid.map((row: number[], rIdx: number) =>
+                      row.map((val: number, cIdx: number) => {
+                        const isActive = memoryState.activeCell[0] === rIdx && memoryState.activeCell[1] === cIdx;
+                        const isDependency = memoryState.dependencies.some((d: any) => d[0] === rIdx && d[1] === cIdx);
+
+                        return (
+                          <div
+                            key={`${rIdx}-${cIdx}`}
+                            className={`w-11 h-11 rounded-lg flex flex-col items-center justify-center border font-bold transition-all ${
+                              isActive
+                                ? "bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-500/40 scale-105 animate-pulse"
+                                : isDependency
+                                ? "bg-indigo-500/20 border-indigo-400/30 text-indigo-300 animate-pulse"
+                                : val > 0
+                                ? "bg-[#18181c] border-white/10 text-gray-300"
+                                : "bg-transparent border-white/5 text-gray-700"
+                            }`}
+                          >
+                            <span className="text-[7px] text-gray-500 block leading-none">{rIdx},{cIdx}</span>
+                            <span className="text-[11px] mt-0.5">{val}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  {memoryState.dependencies.length > 0 && (
+                    <div className="mt-2 text-[9px] text-purple-300 text-center font-semibold">
+                      dp[{memoryState.activeCell[0]}][{memoryState.activeCell[1]}] = dp[{memoryState.activeCell[0]-1}][{memoryState.activeCell[1]}] ({memoryState.grid[memoryState.activeCell[0]-1][memoryState.activeCell[1]]}) + dp[{memoryState.activeCell[0]}][{memoryState.activeCell[1]-1}] ({memoryState.grid[memoryState.activeCell[0]][memoryState.activeCell[1]-1]}) = {memoryState.grid[memoryState.activeCell[0]][memoryState.activeCell[1]]}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+
         </div>
+
       </div>
     </div>
   );

@@ -71,7 +71,7 @@ export default function WorkspaceHomePage() {
             Trapping Rain Water (2D Array Optimization)
           </h3>
           <p className="text-xs sm:text-sm text-gray-400 leading-relaxed">
-            You completed 2 of 3 test cases. Resume line-by-line step visualization to optimize your auxiliary space from O(N) to O(1).
+            You completed 2 of 3 test cases. Open Code Studio to write, run, and optimize your auxiliary space from O(N) to O(1).
           </p>
           <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
             <div className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full w-[65%]" />
@@ -79,11 +79,11 @@ export default function WorkspaceHomePage() {
         </div>
 
         <Link
-          href="/visualizer"
+          href="/studio"
           className="px-6 py-3.5 rounded-2xl bg-white text-black hover:bg-gray-100 font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xl shadow-white/10 hover:shadow-cyan-500/20 transition-all active:scale-95 shrink-0 cursor-pointer"
         >
           <Play className="w-4 h-4 fill-black" />
-          <span>Resume Execution Visualizer</span>
+          <span>Resume Code Studio</span>
         </Link>
       </div>
 

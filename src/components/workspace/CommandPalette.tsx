@@ -50,7 +50,6 @@ export default function CommandPalette() {
     { title: "Home Dashboard", category: "Navigation", href: "/workspace", icon: <Code2 className="w-4 h-4 text-cyan-400" /> },
     { title: "Coding Practice Studio", category: "Practice", href: "/workspace/practice", icon: <FileCode className="w-4 h-4 text-indigo-400" /> },
     { title: "Code Studio (IDE)", category: "Tools", href: "/studio", icon: <Terminal className="w-4 h-4 text-green-400" /> },
-    { title: "Code Visualizer", category: "Tools", href: "/visualizer", icon: <Cpu className="w-4 h-4 text-purple-400" /> },
     { title: "Placement Roadmaps", category: "Learning", href: "/workspace/roadmaps", icon: <MapPin className="w-4 h-4 text-yellow-400" /> },
     { title: "Aptitude & Reasoning", category: "Learning", href: "/workspace/aptitude", icon: <BookOpen className="w-4 h-4 text-pink-400" /> },
     { title: "Analytics & Progress", category: "Analytics", href: "/workspace/progress", icon: <BarChart3 className="w-4 h-4 text-blue-400" /> },

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { AlertCircle } from "lucide-react";
 import IDEToolbar from "@/components/compiler/toolbar/IDEToolbar";
 import CodeEditor from "@/components/compiler/editor/CodeEditor";
 import OutputPanel from "@/components/compiler/output/OutputPanel";
@@ -32,6 +33,26 @@ export default function StudioPage() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<number>(13);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Restore state from visualizer context if coming back from visualizer
+  useEffect(() => {
+    const saved = sessionStorage.getItem("codezilaa_visualizer_context");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.code) setCode(parsed.code);
+        if (parsed.language) setLanguage(parsed.language);
+        if (parsed.customInput !== undefined) setCustomInput(parsed.customInput);
+        if (parsed.cursorPos) setCursorPos(parsed.cursorPos);
+        if (parsed.executionResult) setExecutionResult(parsed.executionResult);
+        if (parsed.fontSize) setFontSize(parsed.fontSize);
+        if (parsed.testCases) setTestCases(parsed.testCases);
+      } catch (e) {
+        console.error("Error restoring studio state from visualizer context", e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -94,6 +115,49 @@ export default function StudioPage() {
     setExecutionResult(null);
   };
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  const handleVisualize = () => {
+    if (!executionResult) {
+      showToast("Run your program successfully before opening the Execution Visualizer.");
+      return;
+    }
+
+    if (executionResult.status !== "success") {
+      if (executionResult.status === "compilation_error") {
+        showToast("Compilation failed. Fix compilation errors before visualizing.");
+      } else {
+        showToast("Run your program successfully before opening the Execution Visualizer.");
+      }
+      return;
+    }
+
+    // Success! Save context and navigate
+    const context = {
+      code,
+      language,
+      customInput,
+      executionResult,
+      testCases,
+      problemTitle: PROBLEM_INFO.title,
+      difficulty: PROBLEM_INFO.difficulty,
+      topic: PROBLEM_INFO.topic,
+      timestamp: Date.now(),
+      executionId: `exec_${Math.random().toString(36).substr(2, 9)}`,
+      cursorPos,
+      fontSize,
+      hasExecuted: true,
+    };
+
+    sessionStorage.setItem("codezilaa_visualizer_context", JSON.stringify(context));
+    router.push("/visualizer");
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -109,6 +173,7 @@ export default function StudioPage() {
         language={language}
         onLanguageChange={handleLanguageChange}
         onRun={handleRunCode}
+        onVisualize={handleVisualize}
         onFormat={handleFormatCode}
         onSave={handleSaveFile}
         onDownload={handleDownloadFile}
@@ -151,6 +216,23 @@ export default function StudioPage() {
         fontSize={fontSize}
         onFontSizeChange={setFontSize}
       />
+
+      {/* Toast Notification for validation */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-20 right-8 z-50 flex items-center gap-3 px-5 py-3.5 bg-[#16161a] border border-red-500/40 rounded-2xl shadow-2xl shadow-red-500/20 text-white text-sm font-medium"
+          >
+            <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
